@@ -7,6 +7,7 @@
 #include "slider.hpp"
 #include "waterserver.hpp"
 
+#include <cstdio>
 #include <getopt.h>
 #include <sys/signal.h>
 #include <unistd.h>
@@ -22,6 +23,18 @@ void sigHandler(int)
     gp_loop->quit();
 }
 
+void showUsage()
+{
+    puts("WaterServer [option]");
+    puts("-s --sensor-path");
+    puts("-a --sensor-addr");
+    puts("-p --sensor-port");
+    puts("-c --camera-path");
+    puts("-l --listen-port");
+    puts("-u --rtmp-url");
+    puts("-h --help");
+}
+
 void getConfig(int argc, char *argv[])
 {
     int optIndex = 0;
@@ -31,9 +44,10 @@ void getConfig(int argc, char *argv[])
                                        {"camera-path", required_argument, NULL, 'c'},
                                        {"listen-port", required_argument, NULL, 'l'},
                                        {"rtmp-url", required_argument, NULL, 'u'},
+                                       {"help", no_argument, NULL, 'h'},
                                        {0, 0, 0, 0}};
     while (1) {
-        auto c = getopt_long(argc, argv, "s:a:p:c:l:u:", longOpts, &optIndex);
+        auto c = getopt_long(argc, argv, "s:a:p:c:l:u:h", longOpts, &optIndex);
         if (c == -1) {
             break;
         }
@@ -62,16 +76,20 @@ void getConfig(int argc, char *argv[])
             Config::RTMP_URL = optarg;
             LOG_INFO << "Config::RTMP_URL " << Config::RTMP_URL;
             break;
+        case 'h':
+        default:
+            showUsage();
+            exit(0);
         }
     }
 }
 
 int main(int argc, char *argv[])
 {
+    getConfig(argc, argv);
     muduo::Logger::setLogLevel(muduo::Logger::INFO);
     gp_loop = new muduo::net::EventLoop{};
     ::signal(SIGINT, sigHandler);
-    getConfig(argc, argv);
     WaterServer water{gp_loop,
                       Config::SENSOR_PATH,
                       Config::SENSOR_ADDR,
