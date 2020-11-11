@@ -94,13 +94,13 @@ void Slider::stop()
     digitalWrite(config_2, 1);
     digitalWrite(config_3, 0);
 #endif
-    movedTimes_ = 0;
+    // movedTimes_ = 0;
 }
 
 void Slider::move(uint pos)
 {
     moving_ = true;
-    if (movedTimes_++ % 3 == 0) {
+    if (movedTimes_++ % 50 == 0) {
         initHeight(pos);
         return;
     }
@@ -128,7 +128,7 @@ void Slider::move(uint pos)
 
 void Slider::moveDone()
 {
-    loop_->runInLoop(moveDoneCallback_);
+    loop_->queueInLoop(moveDoneCallback_);
     moveDoneCallback_ = Slider::defaultMoveDoneCallback;
 }
 

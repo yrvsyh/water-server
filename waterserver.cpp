@@ -17,12 +17,11 @@ WaterServer::WaterServer(muduo::net::EventLoop *loop, std::string ttyPath,
 }
 
 void WaterServer::onSliderMoveDone(
-    const std::shared_ptr<muduo::net::TcpConnection> &sp_conn)
+    muduo::net::TcpConnection *p_conn)
 {
     LOG_INFO << "slider move done";
-    slider_.setMoveDoneCallback([] {});
-    if (sp_conn->connected()) {
-        sp_conn->send("move done\n");
+    if (p_conn && p_conn->connected()) {
+        p_conn->send("move done\n");
     } else {
         LOG_ERROR << "client closed";
     }
@@ -33,8 +32,8 @@ void WaterServer::onMessage(const muduo::net::TcpConnectionPtr &conn,
 {
     auto eol = buffer->findEOL();
     if (eol) {
-        std::string cmd = buffer->retrieveAsString(eol - buffer->peek());
-        handleCmd(conn, cmd);
+        std::string cmd = buffer->retrieveAsString(eol - buffer->peek() + 1);
+        handleCmd(conn, cmd.substr(0, cmd.size() - 1));
     }
 }
 
@@ -51,11 +50,12 @@ void WaterServer::handleCmd(const muduo::net::TcpConnectionPtr &conn, std::strin
     } else if (cmd == "cap") {
         auto img = camera_.capOneFrame("1280x720");
         auto data = std::to_string(img->size());
+	LOG_INFO << "caped " << data << " bytes";
         data.append("\n").append(&(*img)[0], img->size());
         conn->send(data);
     } else if (1 == sscanf(cmd.c_str(), "move %d", &pos)) {
         slider_.setMoveDoneCallback(
-            std::bind(&WaterServer::onSliderMoveDone, this, conn));
+            std::bind(&WaterServer::onSliderMoveDone, this, conn.get()));
         slider_.move(pos);
     }
 }

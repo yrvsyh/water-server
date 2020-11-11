@@ -23,7 +23,7 @@ public:
     ~WaterServer() { gp_slider = nullptr; }
 
 private:
-    void onSliderMoveDone(const std::shared_ptr<muduo::net::TcpConnection> &sp_conn);
+    void onSliderMoveDone(muduo::net::TcpConnection *p_conn);
 
     void onMessage(const muduo::net::TcpConnectionPtr &conn, muduo::net::Buffer *buffer,
                    muduo::Timestamp);
