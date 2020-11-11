@@ -48,7 +48,7 @@ public:
           initedCallback_{[] { LOG_INFO << "init done"; }}, movedTimes_{0}, pos_{0},
           counter_{0}, lastCounter_{0}, moving_{false}, initing_{false}
     {
-        timerId_ = loop_->runEvery(0.5, [&] {
+        timerId_ = loop_->runEvery(0.5, [this] {
             muduo::MutexLockGuard lock{mutex_};
             if (moving_ && lastCounter_ == counter_) {
                 moving_ = false;
@@ -199,7 +199,13 @@ public:
         // serialChannel_->enableReading();
     }
 
-    ~Sensor() { loop_->removeChannel(serialChannel_.get()); }
+    ~Sensor()
+    {
+        auto channel = serialChannel_.get();
+        if (channel) {
+            loop_->removeChannel(channel);
+        }
+    }
 
 private:
     void onMessage(muduo::Timestamp)
@@ -249,11 +255,11 @@ public:
     ~WaterServer() { gp_slider = nullptr; }
 
 private:
-    void onSliderMoveDone(std::weak_ptr<muduo::net::TcpConnection> wp_conn)
+    void onSliderMoveDone(const std::shared_ptr<muduo::net::TcpConnection> &sp_conn)
     {
         LOG_INFO << "slider move done";
-        auto sp_conn = wp_conn.lock();
-        if (sp_conn) {
+        slider_.setMoveDoneCallback([] {});
+        if (sp_conn->connected()) {
             sp_conn->send("move done\n");
         } else {
             LOG_ERROR << "client closed";
@@ -287,8 +293,7 @@ private:
             conn->send(data);
         } else if (1 == sscanf(cmd.c_str(), "move %d", &pos)) {
             slider_.setMoveDoneCallback(
-                std::bind(&WaterServer::onSliderMoveDone, this,
-                          std::weak_ptr<muduo::net::TcpConnection>{conn}));
+                std::bind(&WaterServer::onSliderMoveDone, this, conn));
             slider_.move(pos);
         }
     }
