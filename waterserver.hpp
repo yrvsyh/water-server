@@ -20,15 +20,15 @@ public:
     WaterServer(muduo::net::EventLoop *loop, std::string ttyPath, std::string sensorAddr,
                 uint16_t sensorPort, std::string camPath, uint16_t srvPort);
 
-    ~WaterServer() { gp_slider = nullptr; }
+    ~WaterServer();
 
 private:
-    void onSliderMoveDone(const std::shared_ptr<muduo::net::TcpConnection> &sp_conn);
-
+    void onConnection(const muduo::net::TcpConnectionPtr &);
     void onMessage(const muduo::net::TcpConnectionPtr &conn, muduo::net::Buffer *buffer,
                    muduo::Timestamp);
-
     void handleCmd(const muduo::net::TcpConnectionPtr &conn, std::string cmd);
+    void onSliderMoveDoneSp(muduo::net::TcpConnectionPtr sp_conn);
+    void onSliderMoveDoneP(muduo::net::TcpConnection *p_conn);
 
 private:
     muduo::net::EventLoop *loop_;

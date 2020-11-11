@@ -4,7 +4,7 @@
 #include "muduo/base/Logging.h"
 #include "muduo/net/EventLoop.h"
 
-#include <functional>
+#include <memory>
 
 class Slider
 {
@@ -13,12 +13,12 @@ public:
            std::function<void()> cb = Slider::defaultMoveDoneCallback);
     ~Slider();
     void count();
-    void stop();
+    void stop(bool reset = false);
     void move(uint pos);
     void setMoveDoneCallback(std::function<void()> cb) { moveDoneCallback_ = cb; }
 
 private:
-    void initHeight(uint nextPos = 0);
+    void initHeight(int nextPos = -1);
     void moveDone();
 
 private:
@@ -31,8 +31,6 @@ private:
     int lastCounter_;
     bool moving_;
     bool initing_;
-    muduo::net::TimerId timerId_;
-    muduo::MutexLock mutex_;
 
 private:
     static std::function<void()> defaultMoveDoneCallback;

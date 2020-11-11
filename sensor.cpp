@@ -5,15 +5,15 @@ Sensor::Sensor(muduo::net::EventLoop *loop, std::string ttyPath, std::string add
     : loop_{loop}, serialPort_{ttyPath}, srvAddr_{addr, port}, client_{loop_, srvAddr_,
                                                                        "sensorClient"}
 {
-    client_.enableRetry();
-    client_.connect();
-    serialPort_.open();
-    auto fd = serialPort_.getFd();
+    //    client_.enableRetry();
+    //    client_.connect();
+    //    serialPort_.open();
+    //    auto fd = serialPort_.getFd();
     //        auto fd = ::open("fifo", O_RDWR);
-    serialChannel_.reset(new muduo::net::Channel{loop, fd});
-    serialChannel_->setReadCallback(
-        std::bind(&Sensor::onMessage, this, std::placeholders::_1));
-    serialChannel_->enableReading();
+    //    serialChannel_.reset(new muduo::net::Channel{loop, fd});
+    //    serialChannel_->setReadCallback(
+    //        std::bind(&Sensor::onMessage, this, std::placeholders::_1));
+    //    serialChannel_->enableReading();
 }
 
 Sensor::~Sensor()

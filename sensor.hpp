@@ -22,7 +22,6 @@ public:
 
 private:
     void onMessage(muduo::Timestamp);
-
     void sendSensorData(std::string data);
 
 private:

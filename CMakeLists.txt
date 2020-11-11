@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #add_compile_options("-fsanitize=address")
 #link_libraries("-fsanitize=address")
 
+#add_definitions(-DPI)
 include_directories(include)
 link_directories(lib)
 

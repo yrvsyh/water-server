@@ -22,7 +22,7 @@ Slider::Slider(muduo::net::EventLoop *loop, std::function<void()> cb)
       movedTimes_{0}, pos_{0}, counter_{0}, lastCounter_{0}, moving_{false}, initing_{
                                                                                  false}
 {
-    timerId_ = loop_->runEvery(1, [this] {
+    loop_->runEvery(1, [this] {
         if (moving_ && lastCounter_ == counter_) {
             moving_ = false;
             counter_ = -1;
@@ -71,12 +71,14 @@ void Slider::count()
     counter_--;
 }
 
-void Slider::initHeight(uint nextPos)
+void Slider::initHeight(int nextPos)
 {
     initing_ = true;
     moving_ = true;
     pos_ = 0;
-    initedCallback_ = std::bind(&Slider::move, this, nextPos);
+    if (-1 != nextPos) {
+        initedCallback_ = std::bind(&Slider::move, this, nextPos);
+    }
 #ifdef PI
     digitalWrite(config_2, 0);
     digitalWrite(config_3, 0);
@@ -88,19 +90,23 @@ void Slider::initHeight(uint nextPos)
 #endif
 }
 
-void Slider::stop()
+void Slider::stop(bool reset)
 {
 #ifdef PI
     digitalWrite(config_2, 1);
     digitalWrite(config_3, 0);
 #endif
-    movedTimes_ = 0;
+    if (reset) {
+        movedTimes_ = -1;
+    }
 }
 
 void Slider::move(uint pos)
 {
     moving_ = true;
-    if (movedTimes_++ % 3 == 0) {
+    movedTimes_++;
+    movedTimes_ %= 50;
+    if (movedTimes_ == 0) {
         initHeight(pos);
         return;
     }
@@ -121,8 +127,12 @@ void Slider::move(uint pos)
         moveDone();
     }
 #else
-//        moving_ = false;
-//        moveDone();
+    loop_->runAfter(abs(dis) / 10, [this] {
+        if (moving_) {
+            moving_ = false;
+            moveDone();
+        }
+    });
 #endif
 }
 

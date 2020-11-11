@@ -120,14 +120,13 @@ std::shared_ptr<std::vector<char>> Camera::capOneFrame(std::string video_size,
         av_read_frame(m->ifmt_ctx, pkt);
     }
 
-    auto data = new std::vector<char>(pkt->size);
+    auto data = new std::vector<char>{};
     data->insert(data->end(), pkt->data, pkt->data + pkt->size);
 
     // 写入文件
     FILE *fp = fopen("cap.jpg", "w");
     fwrite(pkt->data, 1, pkt->size, fp);
 
-    printf("cap %d Kb data\n", pkt->size / 1000);
     av_packet_unref(pkt);
     fclose(fp);
 
