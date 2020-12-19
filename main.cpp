@@ -11,7 +11,6 @@
 #include <queue>
 #include <spdlog/spdlog.h>
 #include <string>
-#include <unordered_map>
 
 #ifdef PI
 #include <wiringPi.h>
@@ -26,10 +25,12 @@
 
 struct Conn
 {
-    Conn(bufferevent *bev) : bev(bev)
+    Conn(bufferevent *bev, std::string ip, int port) : bev(bev), ip(ip), port(port)
     {
     }
     bufferevent *bev;
+    std::string ip;
+    int port;
 };
 
 struct MoveCtx
@@ -43,10 +44,7 @@ struct MoveCtx
 };
 
 bufferevent *sensorServer = nullptr;
-std::unordered_map<bufferevent *, std::shared_ptr<Conn>> clientsMap;
 std::queue<MoveCtx> moveQueue;
-
-std::function<void()> cb = [] {};
 
 bool initing = false;
 bool moving = false;
@@ -165,7 +163,7 @@ void replyClient(std::weak_ptr<Conn> conn, int code, std::string msg, std::strin
     {
         auto data = fmt::format("{{\"code\": {}, \"msg\": \"{}\", \"cmd\": \"{}\"}}\n", code, msg, cmd);
         bufferevent_write(client->bev, data.c_str(), data.size());
-        spdlog::info(data.substr(0, data.size() - 1));
+        spdlog::info(data.substr(0, data.size() - 1).append(fmt::format("- {}:{}", client->ip, client->port)));
     }
 }
 
@@ -204,7 +202,6 @@ void slider_cb(int, short, void *)
 
 void doCmd(std::string cmd, std::weak_ptr<Conn> client)
 {
-    spdlog::info("cmd: {}", cmd);
     int pos = 0;
     if (cmd == "stop")
     {
@@ -216,38 +213,44 @@ void doCmd(std::string cmd, std::weak_ptr<Conn> client)
     }
 }
 
-void cmd_client_read_cb(bufferevent *bev, void *)
+void cmd_client_read_cb(bufferevent *bev, void *conn)
 {
+    const auto &client = *reinterpret_cast<std::shared_ptr<Conn> *>(conn);
     auto d = evbuffer_readln(bufferevent_get_input(bev), nullptr, EVBUFFER_EOL_ANY);
     if (d)
     {
         std::string cmd(d);
-        std::weak_ptr<Conn> c = clientsMap.at(bev);
+        spdlog::info("cmd: {} - {}:{}", cmd, client->ip, client->port);
+        std::weak_ptr<Conn> c = client;
         doCmd(cmd, c);
         free(d);
     }
 }
 
-void cmd_client_event_cb(bufferevent *bev, short what, void *)
+void cmd_client_event_cb(bufferevent *bev, short what, void *conn)
 {
+    const auto &client = *reinterpret_cast<std::shared_ptr<Conn> *>(conn);
     if (what & BEV_EVENT_EOF)
     {
-        spdlog::info("client closed");
+        spdlog::info("client closed - {}:{}", client->ip, client->port);
     }
     else if (what & BEV_EVENT_ERROR)
     {
-        spdlog::warn("client error");
+        spdlog::warn("client error - {}:{}", client->ip, client->port);
     }
-    clientsMap.erase(bev);
+    delete &client;
     bufferevent_free(bev);
 }
 
-void cmd_server_listen_cb(evconnlistener *lev, int fd, sockaddr *, int, void *)
+void cmd_server_listen_cb(evconnlistener *lev, int fd, sockaddr *addr, int, void *)
 {
-    spdlog::info("new client connected");
+    auto sin = reinterpret_cast<sockaddr_in *>(addr);
+    auto ip = inet_ntoa(sin->sin_addr);
+    auto port = ntohs(sin->sin_port);
+    spdlog::info("new client connected - {}:{}", ip, port);
     auto bev = bufferevent_socket_new(evconnlistener_get_base(lev), fd, BEV_OPT_CLOSE_ON_FREE);
-    clientsMap.insert({bev, std::make_shared<Conn>(bev)});
-    bufferevent_setcb(bev, cmd_client_read_cb, nullptr, cmd_client_event_cb, nullptr);
+    auto conn = new std::shared_ptr<Conn>(new Conn(bev, ip, port));
+    bufferevent_setcb(bev, cmd_client_read_cb, nullptr, cmd_client_event_cb, conn);
     bufferevent_enable(bev, EV_READ);
 }
 
