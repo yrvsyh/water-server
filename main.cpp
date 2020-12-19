@@ -1,6 +1,7 @@
 #include "serialport.hpp"
 
 #include <arpa/inet.h>
+#include <chrono>
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/event.h>
@@ -11,6 +12,7 @@
 #include <queue>
 #include <spdlog/spdlog.h>
 #include <string>
+#include <thread>
 
 #ifdef PI
 #include <wiringPi.h>
@@ -65,12 +67,12 @@ void stopSlider(bool reset)
     if (reset)
     {
         movedTimes = -1;
-    }
-    while (!moveQueue.empty())
-    {
-        auto &m = moveQueue.front();
-        replyClient(m.conn, -1, "canceled", m.cmd);
-        moveQueue.pop();
+        while (!moveQueue.empty())
+        {
+            auto &m = moveQueue.front();
+            replyClient(m.conn, -1, "stoped", m.cmd);
+            moveQueue.pop();
+        }
     }
 }
 
@@ -92,19 +94,20 @@ void initSliderHeight(int nextPos = -1)
     pos = 0;
     if (-1 != nextPos)
     {
-        initedCallback = [nextPos] { moveSlider(nextPos); };
+        initedCallback = [nextPos] {
+            spdlog::info("reinit height done");
+            moveSlider(nextPos);
+        };
     }
     else
     {
         initedCallback = [] { spdlog::info("default init callback"); };
     }
+    counter = 50000;
 #ifdef PI
     digitalWrite(config_2, 0);
     digitalWrite(config_3, 0);
-    counter_ = 50000;
 #else
-    moving = false;
-    initing = false;
 #endif
 }
 
@@ -125,7 +128,7 @@ void moveSlider(int p)
 {
     moving = true;
     movedTimes++;
-    movedTimes %= 50;
+    movedTimes %= 10;
     if (movedTimes == 0)
     {
         initSliderHeight(p);
@@ -152,7 +155,18 @@ void moveSlider(int p)
     //     moveDone();
     // }
 #else
-
+    new std::thread([p] {
+        while (true)
+        {
+            if (moving && counter < 0)
+            {
+                stopSlider(false);
+                break;
+            }
+            counter--;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
 #endif
 }
 
@@ -205,6 +219,7 @@ void doCmd(std::string cmd, std::weak_ptr<Conn> client)
     int pos = 0;
     if (cmd == "stop")
     {
+        moveQueue.push(MoveCtx(client, -1, cmd));
         stopSlider(true);
     }
     else if (1 == sscanf(cmd.c_str(), "move %d", &pos))
@@ -242,11 +257,12 @@ void cmd_client_event_cb(bufferevent *bev, short what, void *conn)
     bufferevent_free(bev);
 }
 
-void cmd_server_listen_cb(evconnlistener *lev, int fd, sockaddr *addr, int, void *)
+void cmd_server_listen_cb(evconnlistener *lev, int fd, sockaddr *addr, int socklen, void *)
 {
-    auto sin = reinterpret_cast<sockaddr_in *>(addr);
-    auto ip = inet_ntoa(sin->sin_addr);
-    auto port = ntohs(sin->sin_port);
+    sockaddr_in sin;
+    memcpy(&sin, addr, socklen);
+    auto ip = inet_ntoa(sin.sin_addr);
+    auto port = ntohs(sin.sin_port);
     spdlog::info("new client connected - {}:{}", ip, port);
     auto bev = bufferevent_socket_new(evconnlistener_get_base(lev), fd, BEV_OPT_CLOSE_ON_FREE);
     auto conn = new std::shared_ptr<Conn>(new Conn(bev, ip, port));
@@ -326,6 +342,7 @@ int main(int argc, char const *argv[])
     auto sliderTimer = event_new(base, 0, EV_PERSIST, slider_cb, nullptr);
     timeval timeout{1, 0};
     event_add(sliderTimer, &timeout);
+    initSlider();
 
     event_base_dispatch(base);
     return 0;
