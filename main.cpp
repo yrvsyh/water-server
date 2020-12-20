@@ -10,20 +10,27 @@
 #include <functional>
 #include <memory>
 #include <queue>
+#include <signal.h>
 #include <spdlog/spdlog.h>
 #include <string>
 #include <thread>
+#include <unistd.h>
 
 #ifdef PI
 #include <wiringPi.h>
 #endif
 
+#define REINIT_TIME 10
 #define COUNTER_MAX 5333.0
 // 继电器控制口
 #define config_2 4
 #define config_3 5
-// PWM A和B
+// PWM A
 #define signal_A 29
+
+std::string IP = "127.0.0.1";
+int PORT = 1234;
+int LISTEN = 9999;
 
 struct Conn
 {
@@ -128,7 +135,7 @@ void moveSlider(int p)
 {
     moving = true;
     movedTimes++;
-    movedTimes %= 10;
+    movedTimes %= REINIT_TIME;
     if (movedTimes == 0)
     {
         initSliderHeight(p);
@@ -306,8 +313,8 @@ void sensor_read_cb(bufferevent *bev, void *)
             sockaddr_in sin;
             memset(&sin, 0, sizeof(sin));
             sin.sin_family = AF_INET;
-            sin.sin_addr.s_addr = inet_addr("127.0.0.1");
-            sin.sin_port = htons(1234);
+            sin.sin_addr.s_addr = inet_addr(IP.c_str());
+            sin.sin_port = htons(PORT);
             auto clientBev = bufferevent_socket_new(bufferevent_get_base(bev), -1, BEV_OPT_CLOSE_ON_FREE);
             bufferevent_setcb(clientBev, nullptr, nullptr, sensor_client_event_cb, nullptr);
             bufferevent_enable(clientBev, EV_READ);
@@ -317,8 +324,21 @@ void sensor_read_cb(bufferevent *bev, void *)
     }
 }
 
+void signal_cb(int, short, void *base)
+{
+    spdlog::info("exiting eventloop");
+    event_base_loopexit(reinterpret_cast<event_base *>(base), nullptr);
+}
+
 int main(int argc, char const *argv[])
 {
+    if (argc == 4)
+    {
+        IP = argv[1];
+        PORT = atoi(argv[2]);
+        LISTEN = atoi(argv[3]);
+    }
+
     auto base = event_base_new();
 
     sockaddr_in sin;
@@ -326,7 +346,7 @@ int main(int argc, char const *argv[])
     memset(&sin, 0, sizeof(sin));
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = INADDR_ANY;
-    sin.sin_port = htons(9999);
+    sin.sin_port = htons(LISTEN);
     auto cmdServer =
         evconnlistener_new_bind(base, cmd_server_listen_cb, nullptr, LEV_OPT_CLOSE_ON_EXEC | LEV_OPT_REUSEABLE, 5,
                                 reinterpret_cast<const sockaddr *>(&sin), sizeof(sin));
@@ -344,6 +364,16 @@ int main(int argc, char const *argv[])
     event_add(sliderTimer, &timeout);
     initSlider();
 
+    auto signalEvent = event_new(base, SIGHUP, EV_SIGNAL | EV_PERSIST, signal_cb, base);
+    event_add(signalEvent, nullptr);
+
     event_base_dispatch(base);
+
+    evconnlistener_free(cmdServer);
+    ::close(fd);
+    bufferevent_free(sensorBev);
+    event_free(sliderTimer);
+    event_free(signalEvent);
+
     return 0;
 }
