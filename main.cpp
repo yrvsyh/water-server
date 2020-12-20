@@ -292,7 +292,7 @@ void sensor_client_event_cb(bufferevent *bev, short what, void *)
         }
         else
         {
-            spdlog::warn("connect to sensor error");
+            spdlog::debug("connect to sensor error");
         }
         sensorServer = nullptr;
         bufferevent_free(bev);
@@ -306,7 +306,8 @@ void sensor_read_cb(bufferevent *bev, void *)
     {
         if (sensorServer)
         {
-            bufferevent_write(sensorServer, data, strlen(data));
+            auto d = std::string(data).append("\n");
+            bufferevent_write(sensorServer, d.c_str(), d.size());
         }
         else
         {
@@ -351,10 +352,10 @@ int main(int argc, char const *argv[])
         evconnlistener_new_bind(base, cmd_server_listen_cb, nullptr, LEV_OPT_CLOSE_ON_EXEC | LEV_OPT_REUSEABLE, 5,
                                 reinterpret_cast<const sockaddr *>(&sin), sizeof(sin));
 
-    // SerialPort sensor("/dev/ttyUSB0");
-    // sensor.open();
-    // int fd = sensor.fd();
-    int fd = open("fifo", O_RDWR);
+    SerialPort sensor("/dev/ttyUSB0");
+    sensor.open();
+    int fd = sensor.fd();
+    // int fd = open("fifo", O_RDWR);
     auto sensorBev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
     bufferevent_setcb(sensorBev, sensor_read_cb, nullptr, nullptr, nullptr);
     bufferevent_enable(sensorBev, EV_READ);
