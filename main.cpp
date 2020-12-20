@@ -292,7 +292,7 @@ void sensor_client_event_cb(bufferevent *bev, short what, void *)
         }
         else
         {
-            spdlog::warn("connect to sensor error");
+            spdlog::debug("connect to sensor error");
         }
         sensorServer = nullptr;
         bufferevent_free(bev);
@@ -306,7 +306,8 @@ void sensor_read_cb(bufferevent *bev, void *)
     {
         if (sensorServer)
         {
-            bufferevent_write(sensorServer, data, strlen(data));
+            auto d = std::string(data).append("\n");
+            bufferevent_write(sensorServer, d.c_str(), d.size());
         }
         else
         {
