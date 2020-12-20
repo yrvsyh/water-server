@@ -87,7 +87,7 @@ void getConfig(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
     getConfig(argc, argv);
-    muduo::Logger::setLogLevel(muduo::Logger::INFO);
+    muduo::Logger::setLogLevel(muduo::Logger::DEBUG);
     gp_loop = new muduo::net::EventLoop{};
     ::signal(SIGINT, sigHandler);
     WaterServer water{gp_loop,

@@ -48,7 +48,7 @@ void WaterServer::handleCmd(const muduo::net::TcpConnectionPtr &conn, std::strin
     } else if (cmd == "quit") {
         threadPool_.run(std::bind(&Camera::close, &camera_));
     } else if (cmd == "cap") {
-        auto img = camera_.capOneFrame("1280x720");
+        auto img = camera_.capOneFrame("3264x2448", "15");
         auto data = std::to_string(img->size());
 	LOG_INFO << "caped " << data << " bytes";
         data.append("\n").append(&(*img)[0], img->size());

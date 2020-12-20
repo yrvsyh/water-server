@@ -128,7 +128,7 @@ void Slider::move(uint pos)
 
 void Slider::moveDone()
 {
-    loop_->queueInLoop(moveDoneCallback_);
+    loop_->runInLoop(moveDoneCallback_);
     moveDoneCallback_ = Slider::defaultMoveDoneCallback;
 }
 
