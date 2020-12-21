@@ -32,11 +32,12 @@ std::string IP = "127.0.0.1";
 int PORT = 1234;
 int LISTEN = 9999;
 
-struct Conn
+struct ConnCtx
 {
-    Conn(bufferevent *bev, std::string ip, int port) : bev(bev), ip(ip), port(port)
+    ConnCtx(bufferevent *bev, std::string ip, int port) : sp(this, [](ConnCtx *) {}), bev(bev), ip(ip), port(port)
     {
     }
+    std::shared_ptr<ConnCtx> sp;
     bufferevent *bev;
     std::string ip;
     int port;
@@ -44,10 +45,10 @@ struct Conn
 
 struct MoveCtx
 {
-    MoveCtx(std::weak_ptr<Conn> conn, int pos, std::string cmd) : conn(conn), pos(pos), cmd(cmd)
+    MoveCtx(std::weak_ptr<ConnCtx> conn, int pos, std::string cmd) : conn(conn), pos(pos), cmd(cmd)
     {
     }
-    std::weak_ptr<Conn> conn;
+    std::weak_ptr<ConnCtx> conn;
     int pos;
     std::string cmd;
 };
@@ -63,7 +64,7 @@ int pos = 0;
 int movedTimes = 0;
 std::function<void()> initedCallback = [] { spdlog::info("default init callback"); };
 
-void replyClient(std::weak_ptr<Conn> conn, int code, std::string msg, std::string cmd);
+void replyClient(std::weak_ptr<ConnCtx> conn, int code, std::string msg, std::string cmd);
 
 void stopSlider(bool reset)
 {
@@ -177,14 +178,14 @@ void moveSlider(int p)
 #endif
 }
 
-void replyClient(std::weak_ptr<Conn> conn, int code, std::string msg, std::string cmd)
+void replyClient(std::weak_ptr<ConnCtx> conn, int code, std::string msg, std::string cmd)
 {
     auto client = conn.lock();
     if (client)
     {
         auto data = fmt::format("{{\"code\": {}, \"msg\": \"{}\", \"cmd\": \"{}\"}}\n", code, msg, cmd);
         bufferevent_write(client->bev, data.c_str(), data.size());
-        spdlog::info(data.substr(0, data.size() - 1).append(fmt::format("- {}:{}", client->ip, client->port)));
+        spdlog::info(data.substr(0, data.size() - 1).append(fmt::format(" - {}:{}", client->ip, client->port)));
     }
 }
 
@@ -221,7 +222,7 @@ void slider_cb(int, short, void *)
     checkSliderIsStoped();
 }
 
-void doCmd(std::string cmd, std::weak_ptr<Conn> client)
+void doCmd(std::string cmd, std::weak_ptr<ConnCtx> client)
 {
     int pos = 0;
     if (cmd == "stop")
@@ -237,21 +238,20 @@ void doCmd(std::string cmd, std::weak_ptr<Conn> client)
 
 void cmd_client_read_cb(bufferevent *bev, void *conn)
 {
-    const auto &client = *reinterpret_cast<std::shared_ptr<Conn> *>(conn);
+    auto client = reinterpret_cast<ConnCtx *>(conn);
     auto d = evbuffer_readln(bufferevent_get_input(bev), nullptr, EVBUFFER_EOL_ANY);
     if (d)
     {
         std::string cmd(d);
         spdlog::info("cmd: {} - {}:{}", cmd, client->ip, client->port);
-        std::weak_ptr<Conn> c = client;
-        doCmd(cmd, c);
+        doCmd(cmd, client->sp);
         free(d);
     }
 }
 
 void cmd_client_event_cb(bufferevent *bev, short what, void *conn)
 {
-    const auto &client = *reinterpret_cast<std::shared_ptr<Conn> *>(conn);
+    auto client = reinterpret_cast<ConnCtx *>(conn);
     if (what & BEV_EVENT_EOF)
     {
         spdlog::info("client closed - {}:{}", client->ip, client->port);
@@ -260,7 +260,7 @@ void cmd_client_event_cb(bufferevent *bev, short what, void *conn)
     {
         spdlog::warn("client error - {}:{}", client->ip, client->port);
     }
-    delete &client;
+    delete client;
     bufferevent_free(bev);
 }
 
@@ -272,7 +272,7 @@ void cmd_server_listen_cb(evconnlistener *lev, int fd, sockaddr *addr, int sockl
     auto port = ntohs(sin.sin_port);
     spdlog::info("new client connected - {}:{}", ip, port);
     auto bev = bufferevent_socket_new(evconnlistener_get_base(lev), fd, BEV_OPT_CLOSE_ON_FREE);
-    auto conn = new std::shared_ptr<Conn>(new Conn(bev, ip, port));
+    auto conn = new ConnCtx(bev, ip, port);
     bufferevent_setcb(bev, cmd_client_read_cb, nullptr, cmd_client_event_cb, conn);
     bufferevent_enable(bev, EV_READ);
 }
